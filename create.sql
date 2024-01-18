@@ -16,7 +16,9 @@ insert into commercebuddy.product (id_product, description, price) values (3, 'C
 
 create table commercebuddy.coupon(
     code text,
-    percentage numeric
+    percentage numeric,
+    expire_date timestamp
 );
 
-insert into commercebuddy.coupon (code, percentage) values ('VALE20', 20);
+insert into commercebuddy.coupon (code, percentage, expire_date) values ('VALE20', 20, '2024-12-01T10:00:00');
+insert into commercebuddy.coupon (code, percentage, expire_date) values ('VALE10', 10, '2024-01-01T10:00:00');
