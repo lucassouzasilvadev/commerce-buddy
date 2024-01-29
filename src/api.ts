@@ -1,60 +1,36 @@
 import express from "express";
-import { validate } from "./validator";
 import { Request, Response } from "express";
-import pgp from "pg-promise";
+import Checkout from "./application/usecase/Checkout";
+import PgPromiseAdapter from "./infra/database/PgPromiseAdapter";
+import CurrencyGatewayHttp from "./infra/gateway/CurrencyGatewayHttp";
+import ProductRepositoryDatabase from "./infra/repository/ProductRepositoryDatabase";
+import CouponRepositoryDatabase from "./infra/repository/CouponRepositoryDatabase";
+import OrderRepositoryDatabase from "./infra/repository/OrderRepositoryDatabase";
+import AxiosAdapter from "./infra/http/AxiosAdapter";
 
 const app = express();
 app.use(express.json())
 
 
 app.post("/checkout", async function(req: Request, res: Response) {
-    const connection = pgp()("postgres://postgres:admin@localhost:5432/postgres");
     try{
-        const isValid = validate(req.body.cpf);
-        if(!isValid) throw new Error("Invalid cpf");
-        const output: Output = {
-            total: 0,
-            freight: 0
-        };
-        const items: any = [];
-        if(req.body.items){
-            for(const item of req.body.items){
-                if(item.quantity <= 0) throw new Error("Invalid quantity");
-                if(items.includes(item.idProduct)) throw new Error("Duplicated item");
-                const [productData] = await connection.query("select * from commercebuddy.product where id_product = $1", item.idProduct);
-                if(productData.width < 0 || productData.height < 0 || productData.length < 0 || parseFloat(productData.weight) < 0) throw new Error("Invalid dimension")
-                output.total += parseFloat(productData.price) * item.quantity;           
-                const volume = productData.width/100 * productData.height/100 * productData.length/100;
-                const density = parseFloat(productData.weight)/volume;
-                const itemFreight = 1000 * volume * (density/100);
-                output.freight += Math.max(itemFreight, 10) * item.quantity;
-                items.push(item.idProduct);
-            }   
-        }       
-        if(req.body.coupon){
-            const [couponData] = await connection.query("select * from commercebuddy.coupon where code = $1", [req.body.coupon]);
-            if(couponData.expire_date.getTime() >= new Date().getTime()) {
-                const percentage = parseFloat(couponData.percentage);
-                output.total -= (output.total * percentage)/100;
-            }        
-        }      
-        if(req.body.from && req.body.to){            
-            output.total += output.freight;
-        }
+        const connection = new PgPromiseAdapter();
+        const httpClient = new AxiosAdapter();
+        const currencyGateway = new CurrencyGatewayHttp(httpClient);
+        const productRepository = new ProductRepositoryDatabase(connection);
+        const couponRepository = new CouponRepositoryDatabase(connection);
+        const orderRepository = new OrderRepositoryDatabase(connection);
+        const checkout = new Checkout(currencyGateway, productRepository, couponRepository, orderRepository);
+        const output = await checkout.execute(req.body);
         res.json(output);
-    }catch(e: any){
+    } catch (e: any){
         res.status(422).json({
             message: e.message
         });
-    } finally{
-        await connection.$pool.end();
     }
+    
 });
 
 
-type Output = {
-    total: number
-    freight: number
-}
 
 app.listen(3000);
