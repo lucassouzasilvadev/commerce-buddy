@@ -1,4 +1,3 @@
-import axios from "axios";
 import CurrencyGateway from "../../application/gateway/CurrencyGateway";
 import HttpClient from "../http/HttpClient";
 

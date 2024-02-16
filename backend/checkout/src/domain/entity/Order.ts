@@ -30,6 +30,10 @@ export default class Order {
         if(!coupon.isExpired(this.date)) this.coupon = coupon;
     }
 
+    getCode() {
+        return this.code;
+    }
+
     getTotal() {
         let total = 0;
         for (const item of this.items){            
@@ -40,9 +44,5 @@ export default class Order {
         }
         total += this.freight;        
         return total;
-    }
-
-    getCode() {
-        return this.code;
     }
 }

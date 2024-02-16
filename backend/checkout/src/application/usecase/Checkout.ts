@@ -1,44 +1,52 @@
-import ProductRepositoryDatabase from "../../infra/repository/ProductRepositoryDatabase";
-import CouponRepositoryDatabase from "../../infra/repository/CouponRepositoryDatabase";
 import CurrencyGateway from "../gateway/CurrencyGateway";
-import CurrencyGatewayHttp from "../../infra/gateway/CurrencyGatewayHttp";
 import ProductRepository from "../repository/ProductRepository";
 import CouponRepository from "../repository/CouponRepository";
 import OrderRepository from "../repository/OrderRepository";
 import Order from "../../domain/entity/Order";
 import CurrencyTable from "../../domain/entity/CurrencyTable";
-import FreightCalculator from "../../domain/entity/FreightCalculator";
+import FreightGateway, { Input as FreightInput } from "../gateway/FreightGateway";
+import FreightGatewayHttp from "../../infra/gateway/FreightGatewayHttp";
+import AxiosAdapter from "../../infra/http/AxiosAdapter";
+import CatalogGateway from "../gateway/CatalogGateway";
+import CatalogGatewayHttp from "../../infra/gateway/CatalogGatewayHttp";
+import UseCase from "./UseCase";
+import StockGateway from "../gateway/StockGateway";
+import StockGatewayHttp from "../../infra/gateway/StockGatewayHttp";
+import Queue from "../../infra/queue/Queue";
 
-
-
-export default class Checkout {   
+export default class Checkout implements UseCase  {   
 
     constructor (
         readonly currencyGateway: CurrencyGateway,
         readonly productRepository: ProductRepository,
         readonly couponRepository: CouponRepository,
-        readonly orderRepository: OrderRepository
+        readonly orderRepository: OrderRepository,
+        readonly freightGateway: FreightGateway = new FreightGatewayHttp(new AxiosAdapter()),
+        readonly catalogGateway: CatalogGateway = new CatalogGatewayHttp(new AxiosAdapter()),
+        readonly stockGateway:StockGateway = new StockGatewayHttp(new AxiosAdapter()),
+        readonly queue?: Queue
         ) {
 
     }
 
-    async execute(input: Input): Promise<Output>{
+    async execute(input: Input): Promise<Output>{        
         const currencies = await this.currencyGateway.getCurrencies();
         const currencyTable = new CurrencyTable();
         currencyTable.addCurrency("USD", currencies.usd);
         const sequence = await this.orderRepository.count();
 
         const order = new Order(input.uuid, input.cpf, currencyTable, sequence, new Date());
-        let freight = 0;
+        const freightInput: FreightInput = { items: [], from: input.from, to: input.to };
         if(input.items){
             for(const item of input.items){
-                const product = await this.productRepository.getProduct(item.idProduct);   
+                const product = await this.catalogGateway.getProduct(item.idProduct);
                 order.addItem(product, item.quantity);      
-                const itemFreight = FreightCalculator.calculate(product, item.quantity);
-                freight += itemFreight;
+                freightInput.items.push({ width: product.width, height: product.height, length: product.length, weight: product.weight, quantity: item.quantity })
             }   
         }
 
+        const freightOutput = await this.freightGateway.calculateFreight(freightInput);
+        const freight = freightOutput.freight;
         if(input.from && input.to){            
             order.freight = freight;
         }
@@ -49,6 +57,11 @@ export default class Checkout {
         }    
         let total = order.getTotal();
         await this.orderRepository.save(order);
+        // decrement estoque        
+        // await this.stockGateway.decrementStock(input);
+        if (this.queue) {
+            await this.queue.publish("orderPlaced", input);
+        }        
         return {
             total,
             freight
@@ -67,5 +80,5 @@ type Input = {
     items: { idProduct: number, quantity: number, price?: number }[],
     coupon?: string,
     from?: string,
-    to?: string
+    to?: string,
 }

@@ -1,11 +1,12 @@
 import HttpServer from "./HttpServer";
 import Checkout from "../../application/usecase/Checkout";
 import GetProducts from "../../application/usecase/GetProducts";
+import UseCase from "../../application/usecase/UseCase";
 
 export default class HttpController {
 
     constructor(readonly httpServer: HttpServer, 
-                readonly checkout: Checkout,
+                readonly checkout: UseCase,
                 readonly getProducts: GetProducts
                 ) {
         httpServer.on("post", "/checkout", async function(params: any, body: any){

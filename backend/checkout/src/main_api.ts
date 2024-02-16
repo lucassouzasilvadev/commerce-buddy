@@ -8,6 +8,7 @@ import PgPromiseAdapter from "./infra/database/PgPromiseAdapter";
 import ProductRepositoryDatabase from "./infra/repository/ProductRepositoryDatabase";
 import Checkout from "./application/usecase/Checkout";
 import GetProducts from "./application/usecase/GetProducts";
+import AuthDecorator from "./application/decorator/AuthDecorator";
 
 const httpServer = new ExpressAdapter();
 const connection = new PgPromiseAdapter();
@@ -18,5 +19,5 @@ const couponRepository = new CouponRepositoryDatabase(connection);
 const orderRepository = new OrderRepositoryDatabase(connection);
 const checkout = new Checkout(currencyGateway, productRepository, couponRepository, orderRepository);
 const getProducts = new GetProducts(productRepository);
-new HttpController(httpServer, checkout, getProducts);
+new HttpController(httpServer, new AuthDecorator(checkout), getProducts);
 httpServer.listen(3000);
